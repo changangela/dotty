@@ -144,6 +144,7 @@ object PatternMatcher {
     case class ReturnPlan(var label: TermSymbol) extends Plan
     case class SeqPlan(var head: Plan, var tail: Plan) extends Plan
     case class ResultPlan(var tree: Tree) extends Plan
+    case object NoOpPlan extends Plan
 
     object TestPlan {
       def apply(test: Test, sym: Symbol, pos: Position, ons: Plan): TestPlan =
@@ -332,9 +333,19 @@ object PatternMatcher {
           val mt @ MethodType(_) = extractor.tpe.widen
           var unapp = extractor.appliedTo(ref(scrutinee).ensureConforms(mt.paramInfos.head))
           if (implicits.nonEmpty) unapp = unapp.appliedToArgs(implicits)
-          val unappPlan = unapplyPlan(unapp, args)
-          if (scrutinee.info.isNotNull || nonNull(scrutinee)) unappPlan
-          else TestPlan(NonNullTest, scrutinee, tree.pos, unappPlan)
+          val scrutineeTpe = scrutinee.info.widenDealias
+          if (scrutineeTpe.isBottomType || scrutineeTpe.isNullType) {
+            // If the value being matched against has type `Nothing`, then the unapply code
+            // will never execute.
+            // If it has type `Null`, then the `NonNullTest` below guarantees that the unapply code
+            // won't execute either.
+            // So we don't need a plan in this case.
+            NoOpPlan
+          } else {
+            val unappPlan = unapplyPlan(unapp, args)
+            if (scrutinee.info.isNotNull || nonNull(scrutinee)) unappPlan
+            else TestPlan(NonNullTest, scrutinee, tree.pos, unappPlan)
+          }
         case Bind(name, body) =>
           if (name == nme.WILDCARD) patternPlan(scrutinee, body, onSuccess)
           else {
@@ -407,6 +418,7 @@ object PatternMatcher {
         plan.tail = apply(plan.tail)
         plan
       }
+      def applyNoOp: Plan = NoOpPlan
       def apply(plan: Plan): Plan = plan match {
         case plan: TestPlan => apply(plan)
         case plan: LetPlan => apply(plan)
@@ -414,6 +426,7 @@ object PatternMatcher {
         case plan: ReturnPlan => apply(plan)
         case plan: SeqPlan => apply(plan)
         case plan: ResultPlan => plan
+        case NoOpPlan => applyNoOp
       }
     }
 
@@ -662,7 +675,7 @@ object PatternMatcher {
     @tailrec
     private def canFallThrough(plan: Plan): Boolean = plan match {
       case _:ReturnPlan | _:ResultPlan => false
-      case _:TestPlan | _:LabeledPlan => true
+      case _:TestPlan | _:LabeledPlan | NoOpPlan => true
       case LetPlan(_, body) => canFallThrough(body)
       case SeqPlan(_, tail) => canFallThrough(tail)
     }
@@ -820,6 +833,9 @@ object PatternMatcher {
           }
         case ResultPlan(tree) =>
           Return(tree, ref(resultLabel))
+        case NoOpPlan =>
+          // TODO(abeln): optimize away
+          Literal(Constant(true))
       }
     }
 
@@ -858,6 +874,8 @@ object PatternMatcher {
               showPlan(tail)
             case ResultPlan(tree) =>
               sb.append(tree.show)
+            case NoOpPlan =>
+              sb.append("NoOp")
           }
         }
       showPlan(plan)
