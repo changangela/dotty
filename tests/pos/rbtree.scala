@@ -24,15 +24,17 @@ import scala.annotation.meta.getter
  *
  *  @since 2.10
  */
+
 private[collection]
 object RedBlackTree {
+  type Tree[A, B] = NETree[A, B] | Null
 
   def isEmpty(tree: Tree[_, _]): Boolean = tree eq null
 
   def contains[A: Ordering](tree: Tree[A, _], x: A): Boolean = lookup(tree, x) ne null
   def get[A: Ordering, B](tree: Tree[A, B], x: A): Option[B] = lookup(tree, x) match {
     case null => None
-    case tree => Some(tree.value)
+    case tree : NETree[A, B] => Some(tree.value)
   }
 
   @tailrec
@@ -80,23 +82,27 @@ object RedBlackTree {
   def take[A: Ordering, B](tree: Tree[A, B], n: Int): Tree[A, B] = blacken(doTake(tree, n))
   def slice[A: Ordering, B](tree: Tree[A, B], from: Int, until: Int): Tree[A, B] = blacken(doSlice(tree, from, until))
 
-  def smallest[A, B](tree: Tree[A, B]): Tree[A, B] = {
+  def smallest[A, B](tree: NETree[A, B] | Null): Tree[A, B] | Null = {
     if (tree eq null) throw new NoSuchElementException("empty map")
-    var result = tree
-    while (result.left ne null) result = result.left
-    result
+    else {
+      var result = tree
+      while (result.left ne null) result = result.left
+      result
+    }
   }
   def greatest[A, B](tree: Tree[A, B]): Tree[A, B] = {
     if (tree eq null) throw new NoSuchElementException("empty map")
-    var result = tree
-    while (result.right ne null) result = result.right
-    result
+    else {
+      var result = tree
+      while (result.right ne null) result = result.right
+      result
+    }
   }
 
 
   def foreach[A,B,U](tree:Tree[A,B], f:((A,B)) => U):Unit = if (tree ne null) _foreach(tree,f)
 
-  private[this] def _foreach[A, B, U](tree: Tree[A, B], f: ((A, B)) => U): Unit = {
+  private[this] def _foreach[A, B, U](tree: NETree[A, B], f: ((A, B)) => U): Unit = {
     if (tree.left ne null) _foreach(tree.left, f)
     f((tree.key, tree.value))
     if (tree.right ne null) _foreach(tree.right, f)
@@ -104,7 +110,7 @@ object RedBlackTree {
 
   def foreachKey[A, U](tree:Tree[A,_], f: A => U):Unit = if (tree ne null) _foreachKey(tree,f)
 
-  private[this] def _foreachKey[A, U](tree: Tree[A, _], f: A => U): Unit = {
+  private[this] def _foreachKey[A, U](tree: NETree[A, _], f: A => U): Unit = {
     if (tree.left ne null) _foreachKey(tree.left, f)
     f((tree.key))
     if (tree.right ne null) _foreachKey(tree.right, f)
@@ -116,16 +122,19 @@ object RedBlackTree {
 
   @tailrec
   def nth[A, B](tree: Tree[A, B], n: Int): Tree[A, B] = {
-    val count = this.count(tree.left)
-    if (n < count) nth(tree.left, n)
-    else if (n > count) nth(tree.right, n - count - 1)
-    else tree
+    if (tree eq null) null
+    else {
+      val count = this.count(tree.left)
+      if (n < count) nth(tree.left, n)
+      else if (n > count) nth(tree.right, n - count - 1)
+      else tree
+    }
   }
 
   def isBlack(tree: Tree[_, _]) = (tree eq null) || isBlackTree(tree)
 
-  private[this] def isRedTree(tree: Tree[_, _]) = tree.isInstanceOf[RedTree[_, _]]
-  private[this] def isBlackTree(tree: Tree[_, _]) = tree.isInstanceOf[BlackTree[_, _]]
+  private[this] inline def isRedTree(tree: Tree[_, _]) = (tree ne null) && tree.isInstanceOf[RedTree[_, _]]
+  private[this] inline def isBlackTree(tree: Tree[_, _]) = (tree ne null) && tree.isInstanceOf[BlackTree[_, _]]
 
   private[this] def blacken[A, B](t: Tree[A, B]): Tree[A, B] = if (t eq null) null else t.black
 
@@ -429,7 +438,7 @@ object RedBlackTree {
    *
    * An alternative is to implement the these classes using plain old Java code...
    */
-  sealed abstract class Tree[A, +B](
+  sealed abstract class NETree[A, +B](
     @(`inline` @getter) final val key: A,
     @(`inline` @getter) final val value: B,
     @(`inline` @getter) final val left: Tree[A, B],
@@ -442,7 +451,7 @@ object RedBlackTree {
   final class RedTree[A, +B](key: A,
                              value: B,
                              left: Tree[A, B],
-                             right: Tree[A, B]) extends Tree[A, B](key, value, left, right) {
+                             right: Tree[A, B]) extends NETree[A, B](key, value, left, right) {
     override def black: Tree[A, B] = BlackTree(key, value, left, right)
     override def red: Tree[A, B] = this
     override def toString: String = "RedTree(" + key + ", " + value + ", " + left + ", " + right + ")"
@@ -450,7 +459,7 @@ object RedBlackTree {
   final class BlackTree[A, +B](key: A,
                                value: B,
                                left: Tree[A, B],
-                               right: Tree[A, B]) extends Tree[A, B](key, value, left, right) {
+                               right: Tree[A, B]) extends NETree[A, B](key, value, left, right) {
     override def black: Tree[A, B] = this
     override def red: Tree[A, B] = RedTree(key, value, left, right)
     override def toString: String = "BlackTree(" + key + ", " + value + ", " + left + ", " + right + ")"
