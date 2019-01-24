@@ -337,6 +337,9 @@ object untpd extends Trees.Instance[Untyped] with UntypedTreeInfo {
   def Apply(fn: Tree, arg: Tree): Apply =
     Apply(fn, arg :: Nil)
 
+  def TypeApply(fn: Tree, tptArg: Tree): TypeApply =
+    TypeApply(fn, tptArg :: Nil)
+
   def ensureApplied(tpt: Tree): Tree = tpt match {
     case _: Apply => tpt
     case _ => Apply(tpt, Nil)
