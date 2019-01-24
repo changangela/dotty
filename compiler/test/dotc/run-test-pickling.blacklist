@@ -9,3 +9,4 @@ typeclass-derivation2.scala
 
 # need support for flow-sensitive type inference
 constant-optimization.scala
+i2939.scala
