@@ -82,19 +82,23 @@ object RedBlackTree {
   def take[A: Ordering, B](tree: Tree[A, B], n: Int): Tree[A, B] = blacken(doTake(tree, n))
   def slice[A: Ordering, B](tree: Tree[A, B], from: Int, until: Int): Tree[A, B] = blacken(doSlice(tree, from, until))
 
-  def smallest[A, B](tree: NETree[A, B] | Null): Tree[A, B] | Null = {
+  def smallest[A, B](tree: Tree[A, B]): Tree[A, B] = {
     if (tree eq null) throw new NoSuchElementException("empty map")
     else {
-      var result = tree
-      while (result.left ne null) result = result.left
+      var result: NETree[A, B] = tree
+      while (result.left ne null) {
+        result = result.left.asInstanceOf[NETree[A, B]]
+      }
       result
     }
   }
   def greatest[A, B](tree: Tree[A, B]): Tree[A, B] = {
     if (tree eq null) throw new NoSuchElementException("empty map")
     else {
-      var result = tree
-      while (result.right ne null) result = result.right
+      var result: NETree[A, B] = tree
+      while (result.right ne null) {
+        result = result.right.asInstanceOf[NETree[A, B]]
+      }
       result
     }
   }
@@ -201,7 +205,7 @@ object RedBlackTree {
       BlackTree(x, xv, tl, tr)
     }
     def subl(t: Tree[A, B]) =
-      if (t.isInstanceOf[BlackTree[_, _]]) t.red
+      if (t.isInstanceOf[BlackTree[_, _]]) t.asInstanceOf[NETree[A, B]].red
       else sys.error("Defect: invariance violation; expected black, got "+t)
 
     def balLeft(x: A, xv: B, tl: Tree[A, B], tr: Tree[A, B]) = if (isRedTree(tl)) {
@@ -258,71 +262,87 @@ object RedBlackTree {
 
   private[this] def doFrom[A, B](tree: Tree[A, B], from: A)(implicit ordering: Ordering[A]): Tree[A, B] = {
     if (tree eq null) return null
-    if (ordering.lt(tree.key, from)) return doFrom(tree.right, from)
-    val newLeft = doFrom(tree.left, from)
-    if (newLeft eq tree.left) tree
-    else if (newLeft eq null) upd(tree.right, tree.key, tree.value, overwrite = false)
-    else rebalance(tree, newLeft, tree.right)
+    else {
+      if (ordering.lt(tree.key, from)) return doFrom(tree.right, from)
+      val newLeft = doFrom(tree.left, from)
+      if (newLeft eq tree.left) tree
+      else if (newLeft eq null) upd(tree.right, tree.key, tree.value, overwrite = false)
+      else rebalance(tree, newLeft, tree.right)
+    }
   }
   private[this] def doTo[A, B](tree: Tree[A, B], to: A)(implicit ordering: Ordering[A]): Tree[A, B] = {
     if (tree eq null) return null
-    if (ordering.lt(to, tree.key)) return doTo(tree.left, to)
-    val newRight = doTo(tree.right, to)
-    if (newRight eq tree.right) tree
-    else if (newRight eq null) upd(tree.left, tree.key, tree.value, overwrite = false)
-    else rebalance(tree, tree.left, newRight)
+    else {
+      if (ordering.lt(to, tree.key)) return doTo(tree.left, to)
+      val newRight = doTo(tree.right, to)
+      if (newRight eq tree.right) tree
+      else if (newRight eq null) upd(tree.left, tree.key, tree.value, overwrite = false)
+      else rebalance(tree, tree.left, newRight)
+    }
   }
   private[this] def doUntil[A, B](tree: Tree[A, B], until: A)(implicit ordering: Ordering[A]): Tree[A, B] = {
     if (tree eq null) return null
-    if (ordering.lteq(until, tree.key)) return doUntil(tree.left, until)
-    val newRight = doUntil(tree.right, until)
-    if (newRight eq tree.right) tree
-    else if (newRight eq null) upd(tree.left, tree.key, tree.value, overwrite = false)
-    else rebalance(tree, tree.left, newRight)
+    else {
+      if (ordering.lteq(until, tree.key)) return doUntil(tree.left, until)
+      val newRight = doUntil(tree.right, until)
+      if (newRight eq tree.right) tree
+      else if (newRight eq null) upd(tree.left, tree.key, tree.value, overwrite = false)
+      else rebalance(tree, tree.left, newRight)
+    }
   }
   private[this] def doRange[A, B](tree: Tree[A, B], from: A, until: A)(implicit ordering: Ordering[A]): Tree[A, B] = {
     if (tree eq null) return null
-    if (ordering.lt(tree.key, from)) return doRange(tree.right, from, until)
-    if (ordering.lteq(until, tree.key)) return doRange(tree.left, from, until)
-    val newLeft = doFrom(tree.left, from)
-    val newRight = doUntil(tree.right, until)
-    if ((newLeft eq tree.left) && (newRight eq tree.right)) tree
-    else if (newLeft eq null) upd(newRight, tree.key, tree.value, overwrite = false)
-    else if (newRight eq null) upd(newLeft, tree.key, tree.value, overwrite = false)
-    else rebalance(tree, newLeft, newRight)
+    else {
+      if (ordering.lt(tree.key, from)) return doRange(tree.right, from, until)
+      if (ordering.lteq(until, tree.key)) return doRange(tree.left, from, until)
+      val newLeft = doFrom(tree.left, from)
+      val newRight = doUntil(tree.right, until)
+      if ((newLeft eq tree.left) && (newRight eq tree.right)) tree
+      else if (newLeft eq null) upd(newRight, tree.key, tree.value, overwrite = false)
+      else if (newRight eq null) upd(newLeft, tree.key, tree.value, overwrite = false)
+      else rebalance(tree, newLeft, newRight)
+    }
   }
 
   private[this] def doDrop[A, B](tree: Tree[A, B], n: Int): Tree[A, B] = {
-    if (n <= 0) return tree
-    if (n >= this.count(tree)) return null
-    val count = this.count(tree.left)
-    if (n > count) return doDrop(tree.right, n - count - 1)
-    val newLeft = doDrop(tree.left, n)
-    if (newLeft eq tree.left) tree
-    else if (newLeft eq null) updNth(tree.right, n - count - 1, tree.key, tree.value, overwrite = false)
-    else rebalance(tree, newLeft, tree.right)
+    if (tree eq null) return null
+    else {
+      if (n <= 0) return tree
+      if (n >= this.count(tree)) return null
+      val count = this.count(tree.left)
+      if (n > count) return doDrop(tree.right, n - count - 1)
+      val newLeft = doDrop(tree.left, n)
+      if (newLeft eq tree.left) tree
+      else if (newLeft eq null) updNth(tree.right, n - count - 1, tree.key, tree.value, overwrite = false)
+      else rebalance(tree, newLeft, tree.right)
+    }
   }
   private[this] def doTake[A, B](tree: Tree[A, B], n: Int): Tree[A, B] = {
-    if (n <= 0) return null
-    if (n >= this.count(tree)) return tree
-    val count = this.count(tree.left)
-    if (n <= count) return doTake(tree.left, n)
-    val newRight = doTake(tree.right, n - count - 1)
-    if (newRight eq tree.right) tree
-    else if (newRight eq null) updNth(tree.left, n, tree.key, tree.value, overwrite = false)
-    else rebalance(tree, tree.left, newRight)
+    if (tree eq null) return null
+    else {
+      if (n <= 0) return null
+      if (n >= this.count(tree)) return tree
+      val count = this.count(tree.left)
+      if (n <= count) return doTake(tree.left, n)
+      val newRight = doTake(tree.right, n - count - 1)
+      if (newRight eq tree.right) tree
+      else if (newRight eq null) updNth(tree.left, n, tree.key, tree.value, overwrite = false)
+      else rebalance(tree, tree.left, newRight)
+    }
   }
   private[this] def doSlice[A, B](tree: Tree[A, B], from: Int, until: Int): Tree[A, B] = {
     if (tree eq null) return null
-    val count = this.count(tree.left)
-    if (from > count) return doSlice(tree.right, from - count - 1, until - count - 1)
-    if (until <= count) return doSlice(tree.left, from, until)
-    val newLeft = doDrop(tree.left, from)
-    val newRight = doTake(tree.right, until - count - 1)
-    if ((newLeft eq tree.left) && (newRight eq tree.right)) tree
-    else if (newLeft eq null) updNth(newRight, from - count - 1, tree.key, tree.value, overwrite = false)
-    else if (newRight eq null) updNth(newLeft, until, tree.key, tree.value, overwrite = false)
-    else rebalance(tree, newLeft, newRight)
+    else {
+      val count = this.count(tree.left)
+      if (from > count) return doSlice(tree.right, from - count - 1, until - count - 1)
+      if (until <= count) return doSlice(tree.left, from, until)
+      val newLeft = doDrop(tree.left, from)
+      val newRight = doTake(tree.right, until - count - 1)
+      if ((newLeft eq tree.left) && (newRight eq tree.right)) tree
+      else if (newLeft eq null) updNth(newRight, from - count - 1, tree.key, tree.value, overwrite = false)
+      else if (newRight eq null) updNth(newLeft, until, tree.key, tree.value, overwrite = false)
+      else rebalance(tree, newLeft, newRight)
+    }
   }
 
   // The zipper returned might have been traversed left-most (always the left child)
@@ -334,10 +354,10 @@ object RedBlackTree {
   // whether the zipper was traversed left-most or right-most.
 
   // If the trees were balanced, returns an empty zipper
-  private[this] def compareDepth[A, B](left: Tree[A, B], right: Tree[A, B]): (NList[Tree[A, B]], Boolean, Boolean, Int) = {
+  private[this] def compareDepth[A, B](left: Tree[A, B], right: Tree[A, B]): (NList[NETree[A, B]] | Null, Boolean, Boolean, Int) = {
     import NList.cons
     // Once a side is found to be deeper, unzip it to the bottom
-    def unzip(zipper: NList[Tree[A, B]], leftMost: Boolean): NList[Tree[A, B]] = {
+    def unzip(zipper: NList[NETree[A, B]], leftMost: Boolean): NList[NETree[A, B]] = {
       val next = if (leftMost) zipper.head.left else zipper.head.right
       if (next eq null) zipper
       else unzip(cons(next, zipper), leftMost)
@@ -347,9 +367,9 @@ object RedBlackTree {
     // found to be deeper, or the bottom is reached
     def unzipBoth(left: Tree[A, B],
                   right: Tree[A, B],
-                  leftZipper: NList[Tree[A, B]],
-                  rightZipper: NList[Tree[A, B]],
-                  smallerDepth: Int): (NList[Tree[A, B]], Boolean, Boolean, Int) = {
+                  leftZipper: NList[NETree[A, B]] | Null,
+                  rightZipper: NList[NETree[A, B]] | Null,
+                  smallerDepth: Int): (NList[NETree[A, B]] | Null, Boolean, Boolean, Int) = {
       if (isBlackTree(left) && isBlackTree(right)) {
         unzipBoth(left.right, right.left, cons(left, leftZipper), cons(right, rightZipper), smallerDepth + 1)
       } else if (isRedTree(left) && isRedTree(right)) {
@@ -373,10 +393,10 @@ object RedBlackTree {
     unzipBoth(left, right, null, null, 0)
   }
 
-  private[this] def rebalance[A, B](tree: Tree[A, B], newLeft: Tree[A, B], newRight: Tree[A, B]) = {
+  private[this] def rebalance[A, B](tree: NETree[A, B], newLeft: Tree[A, B], newRight: Tree[A, B]) = {
     // This is like drop(n-1), but only counting black nodes
     @tailrec
-    def  findDepth(zipper: NList[Tree[A, B]], depth: Int): NList[Tree[A, B]] =
+    def  findDepth(zipper: NList[NETree[A, B]] | Null, depth: Int): NList[NETree[A, B]] =
       if (zipper eq null) {
         sys.error("Defect: unexpected empty zipper while computing range")
       } else if (isBlackTree(zipper.head)) {
@@ -411,18 +431,18 @@ object RedBlackTree {
   }
 
   // Null optimized list implementation for tree rebalancing. null presents Nil.
-  private[this] final class NList[A](val head: A, val tail: NList[A])
+  private[this] final class NList[A](val head: A, val tail: NList[A] | Null)
 
   private[this] final object NList {
 
-    def cons[B](x: B, xs: NList[B]): NList[B] = new NList(x, xs)
+    def cons[B](x: B, xs: NList[B] | Null): NList[B] = new NList(x, xs)
 
-    def foldLeft[A, B](xs: NList[A], z: B)(f: (B, A) => B): B = {
+    def foldLeft[A, B](xs: NList[A] | Null, z: B)(f: (B, A) => B): B = {
       var acc = z
       var these = xs
       while (these ne null) {
-        acc = f(acc, these.head)
-        these = these.tail
+        acc = f(acc, these.asInstanceOf[NList[A]].head)
+        these = these.asInstanceOf[NList[A]].tail
       }
       acc
     }
