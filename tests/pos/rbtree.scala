@@ -14,20 +14,21 @@ package immutable
 
 import scala.annotation.tailrec
 import scala.annotation.meta.getter
+import scala.NonNull.NonNull
 
 /** An object containing the RedBlack tree implementation used by for `TreeMaps` and `TreeSets`.
- *
- *  Implementation note: since efficiency is important for data structures this implementation
- *  uses `null` to represent empty trees. This also means pattern matching cannot
- *  easily be used. The API represented by the RedBlackTree object tries to hide these
- *  optimizations behind a reasonably clean API.
- *
- *  @since 2.10
- */
+  *
+  *  Implementation note: since efficiency is important for data structures this implementation
+  *  uses `null` to represent empty trees. This also means pattern matching cannot
+  *  easily be used. The API represented by the RedBlackTree object tries to hide these
+  *  optimizations behind a reasonably clean API.
+  *
+  *  @since 2.10
+  */
 
 private[collection]
 object RedBlackTree {
-  type Tree[A, B] = NETree[A, B] | Null
+  type Tree[A, +B] = NETree[A, B] | Null
 
   def isEmpty(tree: Tree[_, _]): Boolean = tree eq null
 
@@ -87,7 +88,7 @@ object RedBlackTree {
     else {
       var result: NETree[A, B] = tree
       while (result.left ne null) {
-        result = result.left.asInstanceOf[NETree[A, B]]
+        result = result.left.nn
       }
       result
     }
@@ -97,7 +98,7 @@ object RedBlackTree {
     else {
       var result: NETree[A, B] = tree
       while (result.right ne null) {
-        result = result.right.asInstanceOf[NETree[A, B]]
+        result = result.right.nn
       }
       result
     }
@@ -205,7 +206,7 @@ object RedBlackTree {
       BlackTree(x, xv, tl, tr)
     }
     def subl(t: Tree[A, B]) =
-      if (t.isInstanceOf[BlackTree[_, _]]) t.asInstanceOf[NETree[A, B]].red
+      if (t.isInstanceOf[BlackTree[_, _]]) t.nn.red
       else sys.error("Defect: invariance violation; expected black, got "+t)
 
     def balLeft(x: A, xv: B, tl: Tree[A, B], tr: Tree[A, B]) = if (isRedTree(tl)) {
@@ -441,8 +442,8 @@ object RedBlackTree {
       var acc = z
       var these = xs
       while (these ne null) {
-        acc = f(acc, these.asInstanceOf[NList[A]].head)
-        these = these.asInstanceOf[NList[A]].tail
+        acc = f(acc, these.nn.head)
+        these = these.nn.tail
       }
       acc
     }
@@ -454,7 +455,8 @@ object RedBlackTree {
    * various operations (especially smallest/greatest and update/delete).
    *
    * Unfortunately the direct field access is not guaranteed to work (but
-   * works on the current implementation of the Scala compiler).
+   * works on
+   * the current implementation of the Scala compiler).
    *
    * An alternative is to implement the these classes using plain old Java code...
    */
@@ -495,14 +497,14 @@ object RedBlackTree {
   }
 
   private[this] abstract class TreeIterator[A, B, R](root: Tree[A, B], start: Option[A])(implicit ordering: Ordering[A]) extends Iterator[R] {
-    protected[this] def nextResult(tree: Tree[A, B]): R
+    protected[this] def nextResult(tree: NETree[A, B]): R
 
     override def hasNext: Boolean = lookahead ne null
 
     override def next(): R = lookahead match {
       case null =>
         throw new NoSuchElementException("next on empty iterator")
-      case tree =>
+      case tree: NETree[A, B] =>
         lookahead = findLeftMostOrPopOnEmpty(goRight(tree))
         nextResult(tree)
     }
@@ -515,7 +517,7 @@ object RedBlackTree {
 
     private[this] def pushNext(tree: Tree[A, B]): Unit = {
       try {
-        stackOfNexts(index) = tree
+        stackOfNexts.nn(index) = tree
         index += 1
       } catch {
         case _: ArrayIndexOutOfBoundsException =>
@@ -527,14 +529,14 @@ object RedBlackTree {
            * An exception handler is used instead of an if-condition to optimize the normal path.
            * This makes a large difference in iteration speed!
            */
-          assert(index >= stackOfNexts.length)
-          stackOfNexts :+= null
+          assert(index >= stackOfNexts.nn.length)
+          stackOfNexts = stackOfNexts.nn :+ null
           pushNext(tree)
       }
     }
     private[this] def popNext(): Tree[A, B] = if (index == 0) null else {
       index -= 1
-      stackOfNexts(index)
+      stackOfNexts.nn(index)
     }
 
     private[this] var stackOfNexts = if (root eq null) null else {
@@ -568,24 +570,24 @@ object RedBlackTree {
       find(root)
     }
 
-    private[this] def goLeft(tree: Tree[A, B]) = {
+    private[this] def goLeft(tree: NETree[A, B]) = {
       pushNext(tree)
       tree.left
     }
 
-    private[this] def goRight(tree: Tree[A, B]) = tree.right
+    private[this] def goRight(tree: NETree[A, B]) = tree.right
   }
 
   private[this] class EntriesIterator[A: Ordering, B](tree: Tree[A, B], focus: Option[A]) extends TreeIterator[A, B, (A, B)](tree, focus) {
-    override def nextResult(tree: Tree[A, B]) = (tree.key, tree.value)
+    override def nextResult(tree: NETree[A, B]) = (tree.key, tree.value)
   }
 
   private[this] class KeysIterator[A: Ordering, B](tree: Tree[A, B], focus: Option[A]) extends TreeIterator[A, B, A](tree, focus) {
-    override def nextResult(tree: Tree[A, B]) = tree.key
+    override def nextResult(tree: NETree[A, B]) = tree.key
   }
 
   private[this] class ValuesIterator[A: Ordering, B](tree: Tree[A, B], focus: Option[A]) extends TreeIterator[A, B, B](tree, focus) {
-    override def nextResult(tree: Tree[A, B]) = tree.value
+    override def nextResult(tree: NETree[A, B]) = tree.value
   }
 }
 
